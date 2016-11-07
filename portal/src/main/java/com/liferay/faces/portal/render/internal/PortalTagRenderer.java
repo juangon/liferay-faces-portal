@@ -14,6 +14,7 @@
 package com.liferay.faces.portal.render.internal;
 
 import java.io.IOException;
+import java.io.StringWriter;
 import java.util.Map;
 
 import javax.el.ELContext;
@@ -25,17 +26,19 @@ import javax.faces.context.ResponseWriter;
 import javax.faces.render.Renderer;
 import javax.portlet.PortletRequest;
 import javax.portlet.PortletResponse;
+import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.jsp.JspException;
+import javax.servlet.jsp.JspFactory;
 import javax.servlet.jsp.JspWriter;
 import javax.servlet.jsp.PageContext;
 import javax.servlet.jsp.tagext.BodyContent;
 import javax.servlet.jsp.tagext.Tag;
 
-import com.liferay.faces.portal.jsp.internal.PageContextStringImpl;
 import com.liferay.faces.util.context.FacesRequestContext;
 
+import com.liferay.portal.kernel.servlet.JSPSupportServlet;
 import com.liferay.portal.kernel.util.PortalUtil;
 import com.liferay.portal.kernel.util.WebKeys;
 
@@ -188,8 +191,14 @@ public abstract class PortalTagRenderer<U extends UIComponent, T extends Tag> ex
 		PortletResponse portletResponse = (PortletResponse) externalContext.getResponse();
 		HttpServletResponse httpServletResponse = getHttpServletResponse(portletResponse);
 		String contentType = httpServletResponse.getContentType();
-		ELContext elContext = facesContext.getELContext();
-		PageContext stringPageContext = new PageContextStringImpl(httpServletRequest, httpServletResponse, elContext);
+
+		StringWriter stringWriter = new StringWriter();
+		JspFactory jspFactory = JspFactory.getDefaultFactory();
+		ServletContext servletContext = httpServletRequest.getServletContext();
+		JSPSupportServlet jspSupportServlet = new JSPSupportServlet(servletContext);
+		PageContext stringPageContext = jspFactory.getPageContext(jspSupportServlet, httpServletRequest,
+				httpServletResponse, null, false, 0, false);
+		stringPageContext.pushBody(stringWriter);
 
 		// Invoke the JSP tag lifecycle directly (rather than using the tag from a JSP).
 		tag.setPageContext(stringPageContext);
@@ -202,6 +211,7 @@ public abstract class PortalTagRenderer<U extends UIComponent, T extends Tag> ex
 			if (bodyContent == null) {
 
 				bodyContent = stringPageContext.pushBody();
+				stringPageContext.popBody();
 				bodyTag.setBodyContent(bodyContent);
 			}
 
@@ -247,6 +257,8 @@ public abstract class PortalTagRenderer<U extends UIComponent, T extends Tag> ex
 				}
 			}
 		}
+
+		jspFactory.releasePageContext(stringPageContext);
 
 		// Return the tag output.
 		return portalTagOutputParser.parse(jspWriter);
